@@ -1,0 +1,78 @@
+##### Generic Settings #####
+# The chosen Particles (i.e. scans) to form Events
+## If you want all particles use: particles all
+## This option does not cover the particles that are used to form Tracks/Groups and affinity matrix in peak correlations (all are used in these cases)
+particles Particle_0284 Particle_0506 Particle_0865 Particle_1045 Particle_1362
+
+# Prefix for all filepaths inside of the ./analysis directory
+## E.g. If you are using all particles you could use: name allscans
+## E.g. If you were only using a subset of particles you could use: name subsetscans
+name subsetscans
+
+# Which molecule dataset to use for analysis (i.e. post-CAE)
+## Options: BPT, BPT_new
+molecule BPT
+
+
+##### CAE Settings #####
+# CAE version number (CAE is trained on all scans regardless of name/particles options)
+## Leave the 'c_ver' option blank to use the default model ('cae_v1')
+
+# Whether or not to store the learned weights/loss curves during training
+c_record False
+
+# Number of epochs
+c_epochs 2500
+
+# The learning rate
+c_learning_rate 0.001
+
+# The input shape (ignoring batch size)
+c_input_shape 512 1
+
+# The batch size
+c_batch_size 500
+
+# Size of the CAE embedding
+c_embedding_dim 32
+
+# Number of clusters (i.e. number of Events) during spectral clustering
+c_nclusters 8
+
+
+##### Siamese-CNN Settings #####
+# Siamese-CNN pre-trained version number
+## Leave the 's_ver' option blank to use the default model ('siamese_v1')
+
+# Siamese-CNN fine-tuned version number
+## Leave the 's_ver_ft' option blank to use the default model ('finetune_v1')
+
+# Whether or not to store the learned weights/loss curves during pre-training
+s_record False
+
+# Whether or not to store the learned weights/loss curves during fine-tuning
+s_record_ft False
+
+# Number of epochs during pre-training
+s_epochs 1000
+
+# Number of epochs during fine-tuning
+s_epochs_ft 13
+
+# The learning rate during pre-training
+s_learning_rate 0.01
+
+# The learning rate during fine-tuning
+s_learning_rate_ft 0.001
+
+# The input shape (ignoring the batch size)
+s_input_shape 100 25 1
+
+# The batch size
+s_batch_size 64
+
+# Size of the last FC layer in the siamese-CNN
+s_embedding_dim 128
+
+# Value of k in k-fold cross-validation (i.e. number of data partitions)
+s_kfold 10

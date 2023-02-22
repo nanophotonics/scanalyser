@@ -1,0 +1,16 @@
+# Other than this comment and the redundant spaces left in for clarity...
+# everything is kept bare-bones to show an example of changes that could be made
+
+particles all
+
+name allscans
+
+c_ver cae_v2
+
+c_record True
+
+c_epochs 5000
+
+c_embedding_dim 8
+
+c_nclusters 12

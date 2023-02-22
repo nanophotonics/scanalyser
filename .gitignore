@@ -1,0 +1,5 @@
+# ignore all cache files
+__pycache__
+
+# ignore all analysis files (except the codes within code_tracks/ and code_correlations/)
+analysis/*

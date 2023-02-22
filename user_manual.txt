@@ -1,0 +1,42 @@
+---=== Folder descriptions ===---
+- analysis/: Contains the figures/arrays/text/object files that are output from the various codes within this repo
+
+- configs/: Contains the .txt files that are the user-specific settings required to run the codes (see version_example.txt & version_1.txt)
+
+- data/: Contains the databases/datasets, both pre- and post-processing, as well as the feature-extracted outputs
+
+- nn/: Contains the neural network architectures, as well as their saved logs and checkpoints from training/validation
+
+
+---=== Codes ===---
+# NOTE: Files that start with '+' have functions that need to be accessed to run. Files that start with '-' could be ignored.
+	Functions must be commented in/out within most of these codes in order to select your desired functionality.
+	Descriptions of each function can be found therein
+
++ main_cae_data.py: Loads in the scans, processes them as necessary, and saves them in a format friendly to each code
+
++ main_cae_train.py: Trains and validates the CAE (both pre-training and fine-tuning)
+
++ main_peak_finder.py: Contains post-processing functions to obtain the difference scans, cluster, etc.
+
++ main_siamese_data.py: (WIP) Loads in the Groups extracted from the 'form_tracks_and_groups()' function within 'main_peak_finder.py', and processed them in a similar fashion to 'main_cae_data.py'
+
++ main_siamese_train_eval.py: (WIP) Trains and validates the Siamese-CNN (both pre-training and fine-tuning)
+
+- utils.py: Contains multiple utility functions that are used throughout the various codes (you can find default hyperparams inside the default_hyperparams() function - or see 'configs/version_1.txt' for an example)
+
+- analysis/code_tracks/detector.py: Contains functions to calculate and extract features (transient peaks) from difference scans, etc.
+
+- analysis/code_tracks/tracker.py: Contains classes that store all types of information used through the CAE analysis
+
+- analysis/code_tracks/zipper.py: Contains the functions used to 'zip' disconnected Tracks together (if appropriate)
+
+- analysis/code_tracks/correlations/siamese_eval.py: (WIP) Contains post-processing functions for Siamese-CNN model analysis
+
+
+---=== Other Info ===---
+- requirements.txt: Contains the version requirements for the various packages/modules used throughout this repo
+
+- Look at the "if __name__ == '__main__':" lines at the bottom of the '+' files to view options for running each code
+
+
