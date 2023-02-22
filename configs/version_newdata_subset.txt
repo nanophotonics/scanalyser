@@ -12,7 +12,7 @@ molecule BPT_new
 # with the new BPT datasets
 c_ver_ft cae_v1_ft
 
-c_record_ft False
+c_record_ft True
 
 c_epochs_ft 1000
 
