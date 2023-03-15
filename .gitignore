@@ -3,3 +3,6 @@ __pycache__
 
 # ignore all analysis files (except the codes within code_tracks/ and code_correlations/)
 analysis/*
+
+# ignore all data files
+*.h5

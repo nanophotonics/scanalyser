@@ -304,18 +304,11 @@ def default_hyperparams(params=None):
         # (e.g. 'allscans' when using all particles, or 'subsetscans' when using a subset [see above])
         params['name'] = 'subsetscans'
 
-    # TODO:
-    # Need to create a way to detect if a model is either fine-tuned, or just pre-trained. If the former than you use
-    # the BPT_new dataset, if the latter than you only use the BPT dataset. The reason for this change is because if
-    # you create a new version in ./configs/ and want to pre-train -> fine-tune, you can only select one dataset via
-    # the 'molecule' option below, but you need to choose 'BPT' for pre-training, and 'BPT_new' for fine-tuning (or
-    # any new dataset that might be introduced in the future)
-    #
-    # Perhaps something like: 'molecule_pt' and 'molecule'. The latter is used as normal, but the former is used in the
-    # pre-training function, and is defaulted to whenever 'molecule' is not selected (to satisfy the situation when
-    # only one dataset is being used - i.e. pre-training, but no fine-tuning)
-    if 'molecule' not in params:  # which molecule dataset to use for analysis (i.e. post-CAE)
-        params['molecule'] = 'BPT'  # options: BPT, BPT_new
+    if 'molecule_pt' not in params:  # which molecule dataset to use for pre-training
+        params['molecule_pt'] = 'BPT'
+
+    if 'molecule' not in params:  # which molecule dataset to use for fine-tuning and analysis
+        params['molecule'] = params['molecule_pt']  # options: BPT, BPT_new
     # </editor-fold>
 
     # <editor-fold desc="---=== [+] CAE ===---">
