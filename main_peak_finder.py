@@ -19,7 +19,6 @@ import tensorflow as tf
 import numpy as np
 import pickle
 import glob
-import time
 import csv
 from analysis.code_tracks.detector import detector, difference_scans
 from analysis.code_tracks.tracker import Tracker, Events_Tracker, Event, Groups
@@ -71,24 +70,6 @@ with tf.device('/device:GPU:0'):
         Args:
             dataset: Sliced Tensorflow Array featuring the chosen scans (from the 'True' BPT dataset)
         """
-        # t = time.time()
-        # # Estimate the baseline for each training spectrum
-        # for i, (data, label) in enumerate(dataset.as_numpy_iterator()):
-        #     data = data.squeeze()
-        #
-        #     for d in data:
-        #         recon = als(y=d, lam=10 ** 6, p=0.01)
-        #
-        #         difference = data - recon
-        #
-        # t = time.time() - t
-        # print(f'Time elapsed = {t} s')
-        # print()
-        # print(f'Rate = {416000 / t} spectra/s')
-        # print()
-        # print(f'Speed = {t / 416000} s/spectra')
-        # exit()
-
         # Plot an example of the ALS baseline subtraction
         for data, label in dataset.as_numpy_iterator():
             if label[1].decode('utf-8')[-4:] != '1045':
@@ -1593,6 +1574,9 @@ with tf.device('/device:GPU:0'):
                 # Instantiate list of particles, used to identify the 'real particle' that each scan originated from
                 particles = []
 
+                # Store the individual difference spectra in a separate list
+                indiv_diff = []
+
                 # Cycle through each group vector
                 for vector in event.events[e].vectors:
                     # Find the appropriate scan
@@ -1607,7 +1591,7 @@ with tf.device('/device:GPU:0'):
                     recon = recon.squeeze()
                     difference = difference_scans(data, recon)
 
-                    # Extend list with the spectra from the appropriate timesteps
+                    # Extend list with the spectra from the appropriate time steps
                     if isinstance(vector['start'], list):
                         spectrum = []
                         diff = []
@@ -1616,9 +1600,11 @@ with tf.device('/device:GPU:0'):
                             diff.append(difference[start:end + 1])
                         spectra.append(np.mean(np.concatenate(spectrum, axis=0), axis=0))
                         differences.append(np.mean(np.concatenate(diff, axis=0), axis=0))
+                        indiv_diff.append(list(np.concatenate(diff, axis=0)))
                     else:
                         spectra.append(np.mean(data[vector['start']:vector['end'] + 1], axis=0))
                         differences.append(np.mean(difference[vector['start']:vector['end'] + 1], axis=0))
+                        indiv_diff.append(difference[vector['start']:vector['end'] + 1])
 
                     # Append the particle number to list
                     particles.append(vector['particle_num'])
@@ -1633,11 +1619,19 @@ with tf.device('/device:GPU:0'):
                 diff = np.array(diff)  # convert to array
 
                 # Weight contributions of individual spectra to 'Event spectra' based on scaled silhouette sample scores
-                # (Equation is designed to scale values of x = [-1, 1] non-linearly to between [0, 1], as a linear scale
-                # would give too large of a weighting to samples with negative silhouette sample scores)
                 x = s_samples[np.argwhere(k_events.labels == event.events[e].id).squeeze()]
-                # s_weights = np.array(((x + 1) / 2) * np.exp(x - 1))  # exponentially scaled weights
                 s_weights = np.max((np.zeros(x.shape), x), axis=0)  # linear weights (-ve = 0)
+
+                # Define new filepath to store individual difference spectra within their respective configuration dirs
+                if avg_group:
+                    new_path = f'./analysis/{params["c_ver"]}/{params["c_ver_ft"]}/events/{params["name"]}/{prfx}{k}clusters_avg/config{event.events[e].id}'
+                else:
+                    new_path = f'./analysis/{params["c_ver"]}/{params["c_ver_ft"]}/events/{params["name"]}/{prfx}{k}clusters/config{event.events[e].id}'
+                Path(new_path).mkdir(parents=True, exist_ok=True)
+                for ii, d in enumerate(indiv_diff):
+                    d_scaled = np.array(d) * s_weights[ii]
+                    # Save the individual difference spectrum that make up each 'Event' (new terminology)
+                    np.save(f'{new_path}/difference_event{ii}.npy', d_scaled)
 
                 # Scale the spectra from the Event by their respective weighted silhouette sample scores
                 spec_scaled = np.multiply(spec, s_weights[:, np.newaxis])
@@ -1646,6 +1640,7 @@ with tf.device('/device:GPU:0'):
                 # Save all mean Group spectra to file
                 # np.save(f'{path}/mean_group_spectra_{event.events[e].id}.npy', spec)  # original spectra
                 np.save(f'{path}/mean_group_spectra_{event.events[e].id}.npy', spec_scaled)  # weighted spectra
+                np.save(f'{path}/mean_group_difference_{event.events[e].id}.npy', diff_scaled)  # weighted diff spec
 
                 # Take the 'global' mean of all mean Group spectra
                 mean_spectrum = np.mean(spec, axis=0)  # mean 'Event spectrum' (i.e. representative spectrum of Event)
