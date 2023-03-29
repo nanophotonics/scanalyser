@@ -1,11 +1,10 @@
-csv: 1.0
+# The range of versions shows the original version during development and the final version during the last test
 h5py: 2.10.0
-matplotlib: 3.1.3
-numpy: 1.18.1
-pycharm: 2021.3.2
-python: 3.6.9
-scipy: 1.4.1
+matplotlib: 3.1.3 - 3.4.2
+numpy: 1.18.1  - 1.24.1
+python: 3.6.9 - 3.8
+scipy: 1.4.1 - 1.10.1
 skimage (scikit-image): 0.17.2
-sklearn (scikit-learn): 0.24.2
-tensorflow: 2.1.0
+sklearn (scikit-learn): 0.24.2 - 1.2.1
+tensorflow: 2.1.0 - 2.10.0
 tensorflow_addons: 0.8.3
