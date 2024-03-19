@@ -2,7 +2,8 @@
 # The chosen Particles (i.e. scans) to form Events
 ## If you want all particles use: particles all
 ## This option does not cover the particles that are used to form Tracks/Groups and affinity matrix in peak correlations (all are used in these cases)
-particles Particle_0284 Particle_0506 Particle_0865 Particle_1045 Particle_1362
+particles all
+#Particle_0284 Particle_0506 Particle_0865 Particle_1045 Particle_1362
 
 # Prefix for all filepaths inside of the ./analysis directory
 ## E.g. If you are using all particles you could use: name allscans
