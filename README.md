@@ -3,6 +3,5 @@ TODO:
 - Update the .gitignore to allow for post-processed data files (e.g. Tracks, Groups, Events, etc.)
 - Update the terminology to be in-line with the paper
 - - From code -> paper, the conversions needed are:
-- - tracks -> tracks
 - - groups -> events
 - - events -> configs

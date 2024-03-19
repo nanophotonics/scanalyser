@@ -19,6 +19,30 @@ import csv
 from scipy.interpolate import interp1d
 from pathlib import Path
 
+# Set random seed for TensorFlow
+tf.random.set_seed(123456)
+
+# Set random seed for NumPy if you use it within TensorFlow
+np.random.seed(123456)
+
+def cosmic_ray_numpy(data, T=0.25):
+    N, Y, X = np.where(data == 1.0)
+    for n, y, x in zip(N, Y, X):
+        cosmic_ray = False
+        scan = data[n]
+        if x == 0:
+            cosmic_ray = True if scan[y, x + 2] < T else False
+        elif x == len(X) - 1:
+            cosmic_ray = True if scan[y, x - 2] < T else False
+        else:
+            cosmic_ray = True if scan[y, x - 2] < T and scan[y, x + 2] < T else False
+            
+        if cosmic_ray:
+            scan[y, x-2:x+2] = (scan[y, x - 2] + scan[y, x + 2]) / 2
+            scan = (scan - np.min(scan)) / (np.max(scan) - np.min(scan))
+            data[n] = scan
+        
+    return data
 
 #######################################################################################################################
 # Original BPT dataset
@@ -36,7 +60,7 @@ def bpt_dataset():
     print('>> Forming train/valid/test datasets')
 
     # Open raw .h5 dataset
-    dataset = h5py.File('./data/BPT_Dataset_For_Kent.h5', 'r')
+    dataset = h5py.File(r"/home/ms3052/rds/hpc-work/Scanalyser/data/BPT_Dataset_For_Kent.h5", 'r')
 
     # Create new wavenumber scale (step size = wavenumber resolution in pixels)
     wavenumber_scale = np.arange(268, 1611, 2.625)
@@ -46,17 +70,17 @@ def bpt_dataset():
     choose_dataset = 3 * choose_train + 1 * choose_valid
 
     # Create the directories for the train/valid/test datasets if they do not yet exist
-    Path('./data/train/').mkdir(parents=True, exist_ok=True)
-    Path('./data/valid/').mkdir(parents=True, exist_ok=True)
-    Path('./data/test/').mkdir(parents=True, exist_ok=True)
+    Path('./data/train_clean/').mkdir(parents=True, exist_ok=True)
+    Path('./data/valid_clean/').mkdir(parents=True, exist_ok=True)
+    Path('./data/test_clean/').mkdir(parents=True, exist_ok=True)
 
     # Create csv writers for spectrum labels and spectrum names for all three datasets
-    with open(f'./data/train/train_labels.csv', 'w', newline='') as trainlabelcsv, \
-            open(f'./data/train/train_specs.csv', 'w', newline='') as trainspeccsv, \
-            open(f'./data/valid/valid_labels.csv', 'w', newline='') as validlabelcsv, \
-            open(f'./data/valid/valid_specs.csv', 'w', newline='') as validspeccsv, \
-            open(f'./data/test/test_labels.csv', 'w', newline='') as testlabelcsv, \
-            open(f'./data/test/test_specs.csv', 'w', newline='') as testspeccsv:
+    with open(f'./data/train_clean/train_labels.csv', 'w', newline='') as trainlabelcsv, \
+            open(f'./data/train_clean/train_specs.csv', 'w', newline='') as trainspeccsv, \
+            open(f'./data/valid_clean/valid_labels.csv', 'w', newline='') as validlabelcsv, \
+            open(f'./data/valid_clean/valid_specs.csv', 'w', newline='') as validspeccsv, \
+            open(f'./data/test_clean/test_labels.csv', 'w', newline='') as testlabelcsv, \
+            open(f'./data/test_clean/test_specs.csv', 'w', newline='') as testspeccsv:
         trainlabelwriter = csv.writer(trainlabelcsv)
         trainspecwriter = csv.writer(trainspeccsv)
         validlabelwriter = csv.writer(validlabelcsv)
@@ -83,6 +107,7 @@ def bpt_dataset():
 
             # Obtain the wavenumber information
             wavenumber = dataset[particle].attrs['wavenumber_axis']
+            # print(wavenumber)
 
             # Reduce the scan by 300 (i.e. remove average background count)
             scan = dataset[particle][:] - 300
@@ -104,26 +129,31 @@ def bpt_dataset():
             # Linearly rescale the data between [0, 1]
             scan_reshape = (scan_reshape - np.min(scan_reshape)) / (np.max(scan_reshape) - np.min(scan_reshape))
 
-            # Save the interpolated scans as npy files in their respective directories
-            # - Write directories of each scan to respective csv (name_spec is the *exact* filepath to each npy)
-            # - Write labels to respective csv files
-            if flags == 'train':
-                np.save(f'./data/train/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
-                name_spec = [f'./data/train/scan_{particle_str}_{power}_{pico}.npy']
-                trainspecwriter.writerow(name_spec)
-                trainlabelwriter.writerow(label)
-
-            elif flags == 'valid':
-                np.save(f'./data/valid/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
-                name_spec = [f'./data/valid/scan_{particle_str}_{power}_{pico}.npy']
-                validspecwriter.writerow(name_spec)
-                validlabelwriter.writerow(label)
-
+            scan_flat = scan_reshape.reshape((512000))
+            sorted_scan = np.sort(scan_flat)
+            if sorted_scan[int(sorted_scan.shape[0] * 0.9999)] <= 0.75:
+                continue
             else:
-                np.save(f'./data/test/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
-                name_spec = [f'./data/test/scan_{particle_str}_{power}_{pico}.npy']
-                testspecwriter.writerow(name_spec)
-                testlabelwriter.writerow(label)
+                # Save the interpolated scans as npy files in their respective directories
+                # - Write directories of each scan to respective csv (name_spec is the *exact* filepath to each npy)
+                # - Write labels to respective csv files
+                if flags == 'train':
+                    np.save(f'./data/train_clean/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
+                    name_spec = [f'./data/train_clean/scan_{particle_str}_{power}_{pico}.npy']
+                    trainspecwriter.writerow(name_spec)
+                    trainlabelwriter.writerow(label)
+
+                elif flags == 'valid':
+                    np.save(f'./data/valid_clean/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
+                    name_spec = [f'./data/valid_clean/scan_{particle_str}_{power}_{pico}.npy']
+                    validspecwriter.writerow(name_spec)
+                    validlabelwriter.writerow(label)
+
+                else:
+                    np.save(f'./data/test_clean/scan_{particle_str}_{power}_{pico}.npy', scan_reshape)
+                    name_spec = [f'./data/test_clean/scan_{particle_str}_{power}_{pico}.npy']
+                    testspecwriter.writerow(name_spec)
+                    testlabelwriter.writerow(label)
     return
 
 
@@ -268,6 +298,7 @@ def new_bpt_dataset():
         # (NOTE: The 'Au NP on 1ML Pd mirror @ 150 mW' dataset is skipped because its files are corrupted(?)... they
         # have infinite loops, which prevents the data from being saved/modified/used)
         filepaths = glob.glob('./data/BPT_new/datasets/*/*.h5')[0:1] + glob.glob('./data/BPT_new/datasets/*/*.h5')[2:]
+        print(filepaths)
         for filepath in filepaths:
             with h5py.File(filepath, 'r') as dataset:  # this also works: dataset = h5py.File(filepath, 'r')
                 print('--------------------')
@@ -483,23 +514,32 @@ def load_scan(name):
     return data.astype(np.float32)
 
 
-def load_dataset(params, data_type):
+def load_dataset(params, data_type, path=None):
     """ Load in the specified dataset as a sliced tensorflow dataset
 
     Args:
         params: Dict, The hyperparameter dictionary
         data_type: Str, The chosen dataset. options: train, valid, test
+        
     """
-    # Define filepath extension necessary to locate the correct scans
+
+    # Set random seed for TensorFlow
+    tf.random.set_seed(123456)
+
+    # Set random seed for NumPy if you use it within TensorFlow
+    np.random.seed(123456)
+
     if params['molecule'] == 'BPT':
-        ext = ''
+            ext = ''
     else:
         ext = f'{params["molecule"]}/'
 
-    with open(f'./data/{ext}{data_type}/{data_type}_specs.csv', 'r', newline='') as speccsv:
+    path = path if path else f'./data/{ext}{data_type}/{data_type}_specs.csv'
+
+    with open(path, 'r', newline='') as speccsv:
         name_spec = list(csv.reader(speccsv, delimiter=','))
         num_spectra = len(name_spec)
-        dataset = (tf.data.Dataset.from_tensor_slices(name_spec).shuffle(num_spectra).map(
+        dataset = (tf.data.Dataset.from_tensor_slices(name_spec).shuffle(num_spectra, seed=123456).map(
             lambda name: tf.py_function(load_scan, [name], [tf.float32])).map(
             lambda data: tf.expand_dims(data, axis=-1)))
     return dataset, num_spectra
@@ -649,7 +689,7 @@ def select_scan(params, particles=None, powers=None, picos=None, flags=None, exp
 
 if __name__ == '__main__':
     # # Create train/valid/test folders in './data' directory from which datasets or specific scans are called
-    # bpt_dataset()
+    bpt_dataset()
 
     # create_wavenumbers()
 

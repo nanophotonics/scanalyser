@@ -203,13 +203,19 @@ key_checks = {'particles': checkliststr,
 
 
 # <editor-fold desc="---=== [+] Functions to Instantiate User-Specified Hyperparameter Dictionary ===---">
-def hyperparams_setup():
+def hyperparams_setup(cfg_path=None):
     """ Loads in the chosen config file to instantiate user-selected hyperparameters
 
     Returns:
         params: Dict, The complete hyperparameter dictionary
     """
-    return load_config(choose_config_name())
+    if cfg_path:
+        loaded_cfg =  load_config(cfg_name=cfg_path)
+        print(f"Loaded config from {cfg_path}")
+        return loaded_cfg
+    else:
+        print("No config path passed as an argument. Using interactive mode then.")
+        return load_config(choose_config_name())
 
 
 def choose_config_name():
@@ -609,11 +615,11 @@ def overlays(params, data, tracker, label_str, overlay_type, recon=None):
             ticks.append(a / (wn_range[right] - wn_range[left]) * (right - left) + left)
 
         # Retrieve the original particle information from the global particle number
-        particle_info = particle_name(particle=f'Particle_{label_str}')
+        particle_info = particle_name(params=params, particle=f'Particle_{label_str}')
 
         _, (ax0, ax1, ax2, ax3) = plt.subplots(nrows=1, ncols=4, sharey=True, figsize=(16, 5))
         plt.suptitle(f'Particle {label_str} ({particle_info[0]})', fontsize=14)
-
+        
         ax0.set_title('Original', fontsize=12)
         ax0.imshow(data, cmap='inferno')
         ax0.set_xlabel('Wavenumber cm$^{-1}$', fontsize=12)
@@ -773,6 +779,9 @@ def particle_name(params, particle=None):
     Returns:
         List of information matching the given global particle name
     """
+    if params['molecule'] == 'BPT':
+            return particle
+    
     if isinstance(particle, str):  # If the format is 'Particle_xxxx' then convert to ['xxxx']
         particle = [particle[-4:]]
 
