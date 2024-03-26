@@ -1,5 +1,20 @@
 # ignore all cache files
 __pycache__
-
+.vscode
+.ipynb_checkpoints
+.ipynb
+/data/
+/nn/checkpoints/
+/nn/logs
+.env
 # ignore all data files
 *.h5
+*.npy
+*.png
+*.pkl
+*.out
+*.v2
+*.wilkes3
+*.txt
+*.swp
+machine.file.*

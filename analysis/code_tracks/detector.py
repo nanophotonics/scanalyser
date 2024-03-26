@@ -213,8 +213,8 @@ def difference_scans(data, recon, offset=0.05):
     global_offset = np.std(data) * offset
 
     # Apply a Savitzky-Golay filter to the input and difference spectra, then calculate the 'difference' spectra
-    data = savgol_filter(data.squeeze(), window_length=7, polyorder=2, axis=0)
-    recon = savgol_filter(recon.squeeze(), window_length=7, polyorder=2, axis=0)
+    data = savgol_filter(data, window_length=7, polyorder=2, axis=0)
+    recon = savgol_filter(recon, window_length=7, polyorder=2, axis=0)
     difference = data - recon
 
     # Set values below global_offset to global_offset, then reduce all data by global_offset (i.e. min value = 0)

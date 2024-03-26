@@ -88,7 +88,7 @@ class Groups(object):
 
 
 # Single Event
-class Event(object):
+class Event(object):#!!!!!!!!!!!!!!!!!!!!!!!
     """ Class that stores all Group feature vectors from one Event
     """
 
