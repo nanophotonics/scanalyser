@@ -1,11 +1,12 @@
 import os
+import time
 import tensorflow as tf
+import numpy as np
 from pathlib import Path
 from nn.models.cae_lambda import Autoencoder
 from main_cae_data import load_dataset
 from utils import hyperparams_setup
-import time
-import numpy as np
+
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 # os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
 
@@ -41,7 +42,7 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
     Args:
         params: Dict, The hyperparameter dictionary;
         checkpoint_interval: int, The step between saved checkpoints;
-        gpus_to_use: list, The list of gpus (devices) to use for the training. Example: ['GPU:0', 'GPU:3'].
+        gpus_to_use: list, The list of gpus (devices) to use for the training. Example: ["GPU:0", "GPU:1"].
         max_to_keep: int, the max number of checkpoints to keep;
     """
     
@@ -226,7 +227,7 @@ if __name__ == '__main__':
     hyperparams = hyperparams_setup(cfg_path="./configs/version_lambda.txt")
 
     # Train the CAE, storing parameters inside ./nn/checkpoints/cae/c_ver, and logs inside ./nn/logs/cae/c_ver
-    train(params=hyperparams, checkpoint_interval=10, gpus_to_use = ["GPU:0"], max_to_keep=500)
+    train(params=hyperparams, checkpoint_interval=10, gpus_to_use = ["GPU:0", "GPU:1"], max_to_keep=500)
 
     # Fine-tune the CAE, storing parameters inside ./nn/checkpoints/cae/c_ver/c_ver_ft, and logs
     # inside ./nn/logs/cae/c_ver/c_ver_ft
