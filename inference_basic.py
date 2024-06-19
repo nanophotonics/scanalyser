@@ -85,7 +85,7 @@ def obtain_difference_scans_v2(params, dataset, model_name, msg=None,
             recon[params['c_batch_size'] * n:params['c_batch_size'] * (n + 1)].assign(decoder(embed[params['c_batch_size'] * n:params['c_batch_size'] * (n + 1)]))
 
         # Remove redundant dimensions and calculate the difference scan
-        data = np.squeeze(data) #lol
+        data = np.squeeze(data)
         recon = np.squeeze(recon)
 
         # Plot histogram of values on the scan.
