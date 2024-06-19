@@ -2,6 +2,7 @@ import os
 import tensorflow as tf
 from importlib import import_module
 from utils import load_config
+import numpy as np
 
 def enable_gpu():
     gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -49,6 +50,7 @@ def forward_pass(input_tensor, config_to_load="version_lambda.txt", ckpt_number=
     encoder, decoder = load_model(ckpt_number, config_to_load)
     input_tensor = tf.expand_dims(input_tensor, axis=-1)
     output_tensor = decoder(encoder(input_tensor))
+    output_tensor = np.squeeze(output_tensor)
     return output_tensor
 
 # if __name__ == "__main__":
