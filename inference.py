@@ -16,7 +16,7 @@ def enable_gpu():
 def load_model(ckpt_number=None, config_to_load="version_lambda.txt"):
     enable_gpu()
 
-    folder_path = './configs/'
+    folder_path = os.path.join('.', 'configs')
     params = load_config(os.path.join(folder_path, config_to_load))
 
     # Load the model with a name from the config file. (params["c_ver"])
