@@ -22,8 +22,8 @@ def load_model(ckpt_number=None, config_to_load="version_lambda.txt"):
     # Load the model with a name from the config file. (params["c_ver"])
     Autoencoder = getattr(import_module(f"nn.models.{params['c_ver']}"), 'Autoencoder')
 
-    enc_dir = f'./nn/checkpoints/cae/{params["c_ver"]}/encoder'
-    dec_dir = f'./nn/checkpoints/cae/{params["c_ver"]}/decoder'
+    enc_dir = rf'./nn/checkpoints/cae/{params["c_ver"]}/encoder'
+    dec_dir = rf'./nn/checkpoints/cae/{params["c_ver"]}/decoder'
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=params['c_learning_rate'], clipnorm=False)
     model = Autoencoder(params)
@@ -35,8 +35,8 @@ def load_model(ckpt_number=None, config_to_load="version_lambda.txt"):
         enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
         dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
     else:
-        enc_path = f'{enc_dir}/ckpt-{ckpt_number}'
-        dec_path = f'{dec_dir}/ckpt-{ckpt_number}'
+        enc_path = rf'{enc_dir}/ckpt-{ckpt_number}'
+        dec_path = rf'{dec_dir}/ckpt-{ckpt_number}'
 
     encoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=encoder)
     decoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=decoder)
