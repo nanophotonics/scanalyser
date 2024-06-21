@@ -13,17 +13,21 @@ def enable_gpu():
         except RuntimeError as e:
             print(e)
 
-def load_model(ckpt_number=None, config_to_load="version_lambda.txt"):
+def load_model(ckpt_number="latest", config_to_load="version_lambda.txt"):
     enable_gpu()
 
-    folder_path = os.path.join('.', 'configs')
+    # Get the absolute path to the current file's directory
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Use os.path.join with current_dir to get absolute paths
+    folder_path = os.path.join(current_dir, 'configs')
     params = load_config(os.path.join(folder_path, config_to_load))
 
     # Load the model with a name from the config file. (params["c_ver"])
-    Autoencoder = getattr(import_module(f"nn.models.{params['c_ver']}"), 'Autoencoder')
+    Autoencoder = getattr(import_module(f"scanalyser.nn.models.{params['c_ver']}"), 'Autoencoder')
 
-    enc_dir = rf'./nn/checkpoints/cae/{params["c_ver"]}/encoder'
-    dec_dir = rf'./nn/checkpoints/cae/{params["c_ver"]}/decoder'
+    enc_dir = os.path.join(current_dir, f'nn/checkpoints/cae/{params["c_ver"]}/encoder')
+    dec_dir = os.path.join(current_dir, f'nn/checkpoints/cae/{params["c_ver"]}/decoder')
 
     optimizer = tf.keras.optimizers.Adam(learning_rate=params['c_learning_rate'], clipnorm=False)
     model = Autoencoder(params)
@@ -31,9 +35,14 @@ def load_model(ckpt_number=None, config_to_load="version_lambda.txt"):
     decoder = model.layers[1]
 
     # If the ckpt_number is not provided, use the latest checkpoint.
-    if ckpt_number is None:
-        enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
-        dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
+    if ckpt_number == "latest":
+        try:
+            enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
+            dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
+        except:
+            print("Failed to load the latest checkpoint. Loading checkpoint number 403 instead.")
+            enc_path = rf'{enc_dir}/ckpt-403'
+            dec_path = rf'{dec_dir}/ckpt-403'
     else:
         enc_path = rf'{enc_dir}/ckpt-{ckpt_number}'
         dec_path = rf'{dec_dir}/ckpt-{ckpt_number}'
