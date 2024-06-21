@@ -24,7 +24,7 @@ def load_model(ckpt_number="latest", config_to_load="version_lambda.txt"):
     params = load_config(os.path.join(folder_path, config_to_load))
 
     # Load the model with a name from the config file. (params["c_ver"])
-    Autoencoder = getattr(import_module(f"scanalyser.nn.models.{params['c_ver']}"), 'Autoencoder')
+    Autoencoder = getattr(import_module(f"nn.models.{params['c_ver']}"), 'Autoencoder')
 
     enc_dir = os.path.join(current_dir, f'nn/checkpoints/cae/{params["c_ver"]}/encoder')
     dec_dir = os.path.join(current_dir, f'nn/checkpoints/cae/{params["c_ver"]}/decoder')
