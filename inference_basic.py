@@ -1,25 +1,20 @@
+# Add the path to the Scanalyser package to the system path.
+import sys
+
+PATH_TO_SCANALYSER = "/home/ms3052/Scanalyser-git-clone/Scanalyser/"
+sys.path.append(PATH_TO_SCANALYSER)
+from inference import load_model
+from main_cae_data import select_scan
+from utils import load_config
+from analysis.code_tracks.detector import difference_scans
+
 import os
 import matplotlib.pyplot as plt
 import numpy as np
-from main_cae_data import select_scan
 from pathlib import Path
-from utils import load_config
-from inference import forward_pass
-from analysis.code_tracks.detector import difference_scans
-
-
-# Constants.
-scan_size = 1000
-ckpt_number = 403 # this ckpt is used for inference
-
-# p_scans contain picocavities, n_scans should not.
-params = load_config("version_lambda.txt")
-p_scans = select_scan(params=params, particles=params['particles'], picos=['True'], exps=[None])
-n_scans = select_scan(params=params, particles=params['particles'], picos=['False'], exps=[None])
-
 
 def obtain_difference_scans(params, dataset, model_name, msg=None, 
-                               path_difference="/home/ms3052/rds/hpc-work/Scanalyser",
+                               path_difference="",
                                ):
     
     for data, label in dataset.as_numpy_iterator():
@@ -28,9 +23,10 @@ def obtain_difference_scans(params, dataset, model_name, msg=None,
         print(f'>> Calculating difference spectra for Particle {label_str}')
         print(data.shape)
 
-        recon = forward_pass(data, ckpt_number=ckpt_number)
+        recon = decoder(encoder(data))
 
         # Remove redundant dimensions and calculate the difference scan
+        recon = np.squeeze(recon)
         data = np.squeeze(data)
 
         # Plot histogram of values on the scan.
@@ -42,7 +38,7 @@ def obtain_difference_scans(params, dataset, model_name, msg=None,
         
         output_folder = f"{path_difference}/hist_model_{model_name}"
         Path(output_folder).mkdir(parents=True, exist_ok=True)
-        histogram_filename = os.path.join(output_folder, f'histogram_{label_str}.png')
+        histogram_filename = os.path.join(output_folder, f'histogram_{label_str}.png') 
         plt.savefig(histogram_filename)
         plt.close()
 
@@ -85,13 +81,25 @@ def obtain_difference_scans(params, dataset, model_name, msg=None,
         plt.tight_layout
 
         # Save the figure as a high-quality image (e.g., PNG)
-        path = f'{path_difference}/difference_{params["molecule"]}_model_{model_name}/'
+        # path = f'{path_difference}/difference_{params["molecule"]}_model_{model_name}/'
+        path = fr'{path_difference}/test_{model_name}/'
         Path(path).mkdir(parents=True, exist_ok=True)
         fig.savefig(f'{path}/particle_{label_str}.png', dpi=300)  # Adjust dpi for desired quality
 
         plt.close(fig)
 
-        return
+    return
 
 if __name__ == "__main__":
-    obtain_difference_scans(params=params, dataset=p_scans, model_name="lambda_fr21")
+
+    ckpt_number = 403 # this ckpt is used for inference
+
+    # p_scans contain picocavities, n_scans should not.
+    data_cfg_path = os.path.join(PATH_TO_SCANALYSER, "configs", "version_lambda.txt")
+    params = load_config(data_cfg_path)
+    p_scans = select_scan(params=params, particles=params['particles'], picos=['True'], exps=[None])
+    # n_scans = select_scan(params=params, particles=params['particles'], picos=['False'], exps=[None])
+
+    # Load the model. NOTE: You don't have to provide the ckpt_number if you want to use the default checkpoint.
+    encoder, decoder = load_model()
+    obtain_difference_scans(params=params, dataset=p_scans, model_name="sat29_inf_v4", path_difference="/home/ms3052/rds/hpc-work/Scanalyser")
