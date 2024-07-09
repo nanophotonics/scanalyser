@@ -47,28 +47,44 @@ def load_model(ckpt_number=None, model_config="version_lambda.txt") -> tf.keras.
     model = Autoencoder(params)
     encoder = model.layers[0]
     decoder = model.layers[1]
-
+    
     if ckpt_number == "latest":
-        try:
-            enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
-            dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
-        except:
-            print("Failed to load the latest checkpoint. Loading the default checkpoint {DEFAULT_CHECKPOINT} instead.")
-            enc_path = rf'{enc_dir}/ckpt-{DEFAULT_CHECKPOINT}'
-            dec_path = rf'{dec_dir}/ckpt-{DEFAULT_CHECKPOINT}'
+        enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
+        dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
+        
     else:
-        try:
-            enc_path = rf'{enc_dir}/ckpt-{ckpt_number}'
-            dec_path = rf'{dec_dir}/ckpt-{ckpt_number}'
-        except:
-            print(f"Failed to load the checkpoint {ckpt_number}. Loading the latest checkpoint instead.")
-            enc_path = tf.train.latest_checkpoint(f'{enc_dir}')
-            dec_path = tf.train.latest_checkpoint(f'{dec_dir}')
+        enc_path = rf'{enc_dir}/ckpt-{ckpt_number}'
+        dec_path = rf'{dec_dir}/ckpt-{ckpt_number}'
+
+
+    print("Encoder summary before loading:")
+    encoder.summary()
+    print("Decoder summary before loading:")
+    decoder.summary()
 
     encoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=encoder)
     decoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=decoder)
 
-    encoder_ckpt.restore(enc_path).expect_partial()
-    decoder_ckpt.restore(dec_path).expect_partial()
+    try:
+        encoder_status = encoder_ckpt.restore(enc_path)
+        decoder_status = decoder_ckpt.restore(dec_path)
+        print("Encoder restore status:", encoder_status)
+        print("Decoder restore status:", decoder_status)
+    except Exception as e:
+        print(f"Error loading checkpoints: {e}")
+        raise
+
+    def check_weights_loaded(model, name):
+        non_zero_weights = sum(tf.math.count_nonzero(w) for w in model.weights)
+        total_weights = sum(tf.size(w) for w in model.weights)
+        print(f"{name} non-zero weights: {non_zero_weights}/{total_weights}")
+
+    check_weights_loaded(encoder, "Encoder")
+    check_weights_loaded(decoder, "Decoder")
+
+    print("Encoder summary after loading:")
+    encoder.summary()
+    print("Decoder summary after loading:")
+    decoder.summary()
 
     return encoder, decoder
