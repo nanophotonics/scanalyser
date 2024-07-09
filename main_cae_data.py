@@ -550,8 +550,23 @@ def load_dataset(params, data_type, path=None):
 
 # <editor-fold desc="---=== [+] Functions to load specific scans (e.g. Particle_1045) ===---">
 # Function to convert name_spec entries to respective numpy arrays
+# def load_scan_eval(name, label):
+#     data = np.load(name.numpy()[0])
+#     return data.astype(np.float32), label
+
 def load_scan_eval(name, label):
-    data = np.load(name.numpy()[0])
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # Directly use script_dir if 'name' already includes 'data' in its path
+    # or adjust base_dir accordingly if your project structure requires it
+    base_dir = script_dir
+    
+    # Construct the absolute path to the .npy file
+    file_path = os.path.join(base_dir, name.numpy()[0].decode('utf-8').lstrip("./"))
+    
+    data = np.load(file_path)
+    
     return data.astype(np.float32), label
 
 
@@ -580,17 +595,42 @@ def select_scan(params, particles=None, powers=None, picos=None, flags=None, exp
     else:
         ext = f'{params["molecule"]}/'
 
-    # Open spec (full paths to .npy files) and label (tables of labels) csv files for the train/valid/test datasets
-    with open(f'./data/{ext}train/train_specs.csv', 'r', newline='') as trainspeccsv, open(
-            f'./data/{ext}train/train_labels.csv', 'r', newline='') as trainlabelcsv:
+    # # Open spec (full paths to .npy files) and label (tables of labels) csv files for the train/valid/test datasets
+    # with open(f'./data/{ext}train/train_specs.csv', 'r', newline='') as trainspeccsv, open(
+    #         f'./data/{ext}train/train_labels.csv', 'r', newline='') as trainlabelcsv:
+    #     train_name_spec = list(csv.reader(trainspeccsv, delimiter=','))
+    #     train_name_label = list(csv.reader(trainlabelcsv, delimiter=','))
+    # with open(f'./data/{ext}valid/valid_specs.csv', 'r', newline='') as validspeccsv, open(
+    #         f'./data/{ext}valid/valid_labels.csv', 'r', newline='') as validlabelcsv:
+    #     valid_name_spec = list(csv.reader(validspeccsv, delimiter=','))
+    #     valid_name_label = list(csv.reader(validlabelcsv, delimiter=','))
+    # with open(f'./data/{ext}test/test_specs.csv', 'r', newline='') as testspeccsv, open(
+    #         f'./data/{ext}test/test_labels.csv', 'r', newline='') as testlabelcsv:
+    #     test_name_spec = list(csv.reader(testspeccsv, delimiter=','))
+    #     test_name_label = list(csv.reader(testlabelcsv, delimiter=','))
+
+    # Get the directory of the current script
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Construct the base path for data directory
+    data_dir = os.path.join(script_dir, 'data')
+
+    # Now, construct the paths to the CSV files using the data directory
+    train_spec_path = os.path.join(data_dir, f"{ext}train", "train_specs.csv")
+    train_label_path = os.path.join(data_dir, f"{ext}train", "train_labels.csv")
+    valid_spec_path = os.path.join(data_dir, f"{ext}valid", "valid_specs.csv")
+    valid_label_path = os.path.join(data_dir, f"{ext}valid", "valid_labels.csv")
+    test_spec_path = os.path.join(data_dir, f"{ext}test", "test_specs.csv")
+    test_label_path = os.path.join(data_dir, f"{ext}test", "test_labels.csv")
+
+    # Open the files using the paths constructed above
+    with open(train_spec_path, 'r', newline='') as trainspeccsv, open(train_label_path, 'r', newline='') as trainlabelcsv:
         train_name_spec = list(csv.reader(trainspeccsv, delimiter=','))
         train_name_label = list(csv.reader(trainlabelcsv, delimiter=','))
-    with open(f'./data/{ext}valid/valid_specs.csv', 'r', newline='') as validspeccsv, open(
-            f'./data/{ext}valid/valid_labels.csv', 'r', newline='') as validlabelcsv:
+    with open(valid_spec_path, 'r', newline='') as validspeccsv, open(valid_label_path, 'r', newline='') as validlabelcsv:
         valid_name_spec = list(csv.reader(validspeccsv, delimiter=','))
         valid_name_label = list(csv.reader(validlabelcsv, delimiter=','))
-    with open(f'./data/{ext}test/test_specs.csv', 'r', newline='') as testspeccsv, open(
-            f'./data/{ext}test/test_labels.csv', 'r', newline='') as testlabelcsv:
+    with open(test_spec_path, 'r', newline='') as testspeccsv, open(test_label_path, 'r', newline='') as testlabelcsv:
         test_name_spec = list(csv.reader(testspeccsv, delimiter=','))
         test_name_label = list(csv.reader(testlabelcsv, delimiter=','))
 
