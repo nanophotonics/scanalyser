@@ -1,4 +1,15 @@
 import os
+import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file.
+load_dotenv()
+DATA_PATH = os.getenv("PAUL_DATA_PATH")
+DATA_NAME = os.getenv("PAUL_DATA_NAME")
+CHECKPOINT_PATH = DATA_PATH
+
+SEED = int(os.getenv("SEED", "1234"))
+
 import time
 import tensorflow as tf
 import numpy as np
@@ -25,16 +36,9 @@ def enable_gpu():
 
 enable_gpu()
 
-def set_seeds(seed=123):
-    # Set the global random seed for TensorFlow
-    tf.random.set_seed(seed)
-
-    # Set the random seed for NumPy
-    np.random.seed(seed)
-
-    return seed # Used as the operation-level seed for TensorFlow
-
-seed = set_seeds()
+tf.random.set_seed(SEED)
+np.random.seed(SEED)
+seed = SEED
 
 def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
     """ Train and validate the CAE model using the BPT dataset
@@ -52,15 +56,42 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
 
     global_batch_size = params['c_batch_size'] * strategy.num_replicas_in_sync
 
-    # Set the auto_shard_policy to DATA
     options = tf.data.Options()
     options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.DATA
 
-    valid_dataset, valid_len = load_dataset(params=params, data_type='valid', path='./data/valid_clean/valid_specs.csv')
-    valid_dataset = valid_dataset.with_options(options).unbatch().shuffle(valid_len * 100, seed=seed).batch(global_batch_size)
+    valid_dataset, _ = load_dataset(params=params, data_type='valid', path=fr"{DATA_PATH}/data/valid_clean/valid_specs.csv")
+    valid_len = sum(1 for _ in valid_dataset.unbatch())
 
-    train_dataset, train_len = load_dataset(params=params, data_type='train', path='./data/train_clean/train_specs.csv')
-    train_dataset = train_dataset.with_options(options).unbatch().shuffle(train_len * 100, seed=seed).batch(global_batch_size, drop_remainder=True)
+    train_dataset, _ = load_dataset(params=params, data_type='train', path=fr"{DATA_PATH}/data/train_clean/train_specs.csv")
+    train_len = sum(1 for _ in train_dataset.unbatch())
+
+    valid_batch_size = 2 ** int(np.log2(valid_len)) # to better leverage the GPU
+
+    if valid_batch_size < global_batch_size:
+        print(f"WARNING: The validation dataset is smaller than the batch size! ({valid_len} < {global_batch_size})")
+        print("Setting the global batch size to the power of 2 closest to the validation dataset size")
+        global_batch_size = valid_batch_size 
+    
+    valid_dataset = (valid_dataset
+        .cache()
+        .with_options(options)
+        .unbatch()
+        .shuffle(1000)
+        .batch(global_batch_size, drop_remainder=True)
+        .prefetch(tf.data.AUTOTUNE))
+    
+    if train_len < global_batch_size:
+        print(f"WARNING: The training dataset is smaller than the batch size! ({train_len} < {global_batch_size})")
+        print("Setting the global batch size to the power of 2 closest to the training dataset size")
+        global_batch_size = 2 ** int(np.log2(train_len))
+
+    train_dataset = (train_dataset
+        .cache()
+        .with_options(options)
+        .unbatch()
+        .shuffle(1000)
+        .batch(global_batch_size, drop_remainder=True)
+        .prefetch(tf.data.AUTOTUNE))
 
     train_dist_dataset = strategy.experimental_distribute_dataset(train_dataset)
     valid_dist_dataset = strategy.experimental_distribute_dataset(valid_dataset)
@@ -70,25 +101,30 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
 
         @tf.function
         def compute_loss(data, train_pred, model_losses):
+            # per_example_loss will have the shape of the batch size as the last dimension will be reduced by the loss function.
             per_example_loss = mse_loss(data, train_pred)
-            loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=global_batch_size)
+            loss = tf.nn.compute_average_loss(per_example_loss, global_batch_size=global_batch_size) 
+                # Now the loss is averaged over the batch size and divided by num_replicas_in_sync
             if model_losses:
                 loss += tf.nn.scale_regularization_loss(tf.add_n(model_losses))
             return loss
-    
+
+        # Adjust learning rate
+        # initial_learning_rate = params['c_learning_rate']
+        # scaled_learning_rate = initial_learning_rate * strategy.num_replicas_in_sync
         optimizer = tf.keras.optimizers.Adam(learning_rate=params['c_learning_rate'], clipnorm=True)
         model = Autoencoder(params)  # Train on the CAE, but...
 
         encoder = model.layers[0]  # ...save weights and checkpoints to the encoder...
         encoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=encoder)
         encoder_mngr = tf.train.CheckpointManager(encoder_ckpt,
-                                                    directory=f'./nn/checkpoints/cae/{params["c_ver"]}/encoder',
+                                                    directory=f"{CHECKPOINT_PATH}/nn/checkpoints/cae/{params['c_ver']}/encoder",
                                                     max_to_keep=max_to_keep)
 
         decoder = model.layers[1]  # ...and the decoder, so that they can be run separately
         decoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=decoder)
         decoder_mngr = tf.train.CheckpointManager(decoder_ckpt,
-                                                    directory=f'./nn/checkpoints/cae/{params["c_ver"]}/decoder',
+                                                    directory=f"{CHECKPOINT_PATH}/nn/checkpoints/cae/{params['c_ver']}/decoder",
                                                     max_to_keep=max_to_keep)
 
         # Restore encoder and decoder weights and biases
@@ -98,9 +134,10 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
         if encoder_mngr.latest_checkpoint and decoder_mngr.latest_checkpoint:
             print(f"Restored encoder from {encoder_mngr.latest_checkpoint}")
             print(f"Restored decoder from {decoder_mngr.latest_checkpoint}")
-            init_epoch = int(encoder_ckpt.save_counter.read_value().numpy())
+            # Extract the epoch number from the checkpoint filename
+            init_epoch = int(encoder_mngr.latest_checkpoint.split('-')[-1]) + 1
         else:
-            init_epoch = 0
+            init_epoch = 1
             if params['c_record']:
                 print('No checkpoint found! Initialising from scratch...')
             else:
@@ -111,8 +148,8 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
 
         if params['c_record']:
             # Create summary writers for losses
-            train_log_dir = f'./nn/logs/cae/{params["c_ver"]}/train'
-            valid_log_dir = f'./nn/logs/cae/{params["c_ver"]}/valid'
+            train_log_dir = f"{CHECKPOINT_PATH}/nn/logs/cae/{params['c_ver']}/train"
+            valid_log_dir = f"{CHECKPOINT_PATH}/nn/logs/cae/{params['c_ver']}/valid"
             train_summary_writer = tf.summary.create_file_writer(train_log_dir)
             valid_summary_writer = tf.summary.create_file_writer(valid_log_dir)
 
@@ -154,44 +191,58 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
         valid_losses = []
 
     for epoch in range(init_epoch, params['c_epochs']):
-        
         epoch_train_loss = 0
         epoch_valid_loss = 0
 
+        num_train_batches = 0
+        num_valid_batches = 0
+
         s_epoch = tf.timestamp()
-        current_epoch = epoch + 1
-        print(f"---=== Epoch {current_epoch}/{params['c_epochs']} ===---")
+        print(f"---=== Epoch {epoch}/{params['c_epochs']} ===---")
 
         s_train = tf.timestamp()
         for train_data in train_dist_dataset:
             epoch_train_loss += distributed_train_step(train_data)
-            # num_batches += 1
+            num_train_batches += 1
+        epoch_train_loss /= num_train_batches
 
-        # It is currently uknown whether or not this loss is batch-size independent.
-        epoch_train_loss /= train_len
         train_losses.append(epoch_train_loss)
         d_train = tf.timestamp() - s_train
 
-        # num_batches = 0
         s_val = tf.timestamp()
         for valid_data in valid_dist_dataset:
             epoch_valid_loss += distributed_valid_step(valid_data)
-            # num_batches += 1
-        epoch_valid_loss /= valid_len
+            num_valid_batches += 1
+        epoch_valid_loss /= num_valid_batches
+
         valid_losses.append(epoch_valid_loss)
         d_val = tf.timestamp() - s_val
 
         if params['c_record']:
             with valid_summary_writer.as_default():
-                tf.summary.scalar('loss', epoch_valid_loss, step=current_epoch)  # Save validation loss every epoch
+                tf.summary.scalar('loss', epoch_valid_loss, step=epoch)  # Save validation loss every epoch
                 np.save(os.path.join(valid_log_dir, 'valid_losses.npy'), np.array(valid_losses))
             with train_summary_writer.as_default():
-                tf.summary.scalar('loss', epoch_train_loss, step=current_epoch)  # Save training loss every epoch
+                tf.summary.scalar('loss', epoch_train_loss, step=epoch)  # Save training loss every epoch
                 np.save(os.path.join(train_log_dir, 'train_losses.npy'), np.array(train_losses))
-            if current_epoch % checkpoint_interval == 0:
-                encoder_mngr.save()
-                decoder_mngr.save()
-                # print(f"Saved checkpoint at epoch {current_epoch}")
+            if epoch % checkpoint_interval == 0:
+                # also save the current epoch number
+                encoder_ckpt.save(file_prefix=f"{encoder_mngr.directory}/ckpt-{epoch}")
+                decoder_ckpt.save(file_prefix=f"{decoder_mngr.directory}/ckpt-{epoch}")
+
+        if params['c_record']:
+            with valid_summary_writer.as_default():
+                tf.summary.scalar('loss', epoch_valid_loss, step=epoch)
+                np.save(os.path.join(valid_log_dir, 'valid_losses.npy'), np.array(valid_losses))
+            with train_summary_writer.as_default():
+                tf.summary.scalar('loss', epoch_train_loss, step=epoch)
+                np.save(os.path.join(train_log_dir, 'train_losses.npy'), np.array(train_losses))
+            if epoch % checkpoint_interval == 0:
+                # Save checkpoints with custom names
+                encoder_save_path = encoder_mngr.save(checkpoint_number=epoch)
+                decoder_save_path = decoder_mngr.save(checkpoint_number=epoch)
+                print(f"Saved encoder checkpoint: {encoder_save_path}")
+                print(f"Saved decoder checkpoint: {decoder_save_path}")
 
         f_epoch = tf.timestamp()
         d_epoch = f_epoch - s_epoch
@@ -215,182 +266,18 @@ def train(params, checkpoint_interval=1, gpus_to_use=None, max_to_keep=2):
         10k in 14s
         60k in 13.5s
     to improve:
-        -allow for multi-gpu (you may need to install NCCL)
         -try mixed precision (not a priority)
         -try rate scheduling (not a priority)
-        -install linux on the local PC or make the old soft work on the windows
-        -Write the Code to process Paul's dataset
 """
 
 if __name__ == '__main__':
     # Load the chosen hyperparameters
-    hyperparams = hyperparams_setup(cfg_path="./configs/version_lambda.txt")
+    hyperparams = hyperparams_setup(cfg_path="./configs/version_paul.txt")
 
     # Train the CAE, storing parameters inside ./nn/checkpoints/cae/c_ver, and logs inside ./nn/logs/cae/c_ver
-    train(params=hyperparams, checkpoint_interval=10, gpus_to_use = ["GPU:0", "GPU:1"], max_to_keep=500)
-
-    # Fine-tune the CAE, storing parameters inside ./nn/checkpoints/cae/c_ver/c_ver_ft, and logs
-    # inside ./nn/logs/cae/c_ver/c_ver_ft
-    # if not (hyperparams['c_record'] and not hyperparams['c_record_ft']):
-    #     fine_tune(params=hyperparams)
+    train(params=hyperparams, checkpoint_interval=20, gpus_to_use = None, max_to_keep=1005)
 
     # If you want to view loss curves, then run the following on the command line:
     # tensorboard --logdir="./nn/logs/cae/"
     # NOTE: You may need to alter the preceding directory as necessary.
     # This tensorboard can be view in a browser using the default URL: localhost:6006/
-
-     # If you want to continue training from checkpoint 2500 for more epochs
-    # continue_training = True
-
-    # if continue_training:
-    #     # Load checkpoint 2500
-    #     encoder_ckpt.restore('./nn/checkpoints/cae/cae_v1/encoder/ckpt-2500').expect_partial()
-    #     decoder_ckpt.restore('./nn/checkpoints/cae/cae_v1/decoder/ckpt-2500').expect_partial()
-
-    #     # Modify hyperparameters if needed
-    #     hyperparams['c_epochs'] = 2600  # Set to the desired total number of epochs
-
-    #     # Train the CAE from checkpoint 2500 for additional epochs
-    #     train_cae(params=hyperparams)
-
-# The fine_tune is currently quite out-dated.
-def fine_tune(params):
-    """ Fine-tune the pre-trained CAE model using the new BPT dataset
-
-    Args:
-        params: Dict, The hyperparameter dictionary
-    """
-    # <editor-fold desc="---=== [+] Instantiate Pre-Trained Model, Loss Function, and Checkpoint Managers ===---">
-    # Define the MSE (i.e. L2) loss function
-    mse_loss = tf.keras.losses.MeanSquaredError()
-
-    # Define optimiser function and instantiate CAE model
-    optimizer = tf.keras.optimizers.Adam(learning_rate=params['c_learning_rate'], clipnorm=True)
-    model = Autoencoder(params)  # train on the CAE, but...
-
-    # Load the partially-trained model if it exists
-    encoder = model.layers[0]  # ...save the trainable parameters to the encoder...
-    encoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=encoder)
-    encoder_mngr = tf.train.CheckpointManager(encoder_ckpt,
-                                                directory=f'./nn/checkpoints/cae/{params["c_ver"]}/encoder',
-                                                max_to_keep=5) #was 2, not 5
-
-    decoder = model.layers[1]  # ...and the decoder, so that they can be run separately
-    decoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=decoder)
-    decoder_mngr = tf.train.CheckpointManager(decoder_ckpt,
-                                                directory=f'./nn/checkpoints/cae/{params["c_ver"]}/decoder',
-                                                max_to_keep=5) #was 2, not 5
-
-    # Store filepaths for latest pre-trained model, used to restore model after each iteration of fine-tuning
-    encoder_pretrained = encoder_mngr.latest_checkpoint
-    decoder_pretrained = decoder_mngr.latest_checkpoint
-    if encoder_pretrained and decoder_pretrained:
-        # print(f"Restored Encoder from {encoder_pretrained}")
-        # print(f"Restored Decoder from {decoder_pretrained}")
-        pass
-    else:
-        print("No checkpoint found for the pre-trained model! Exiting...")
-        exit()
-    # </editor-fold>
-
-    # Define the filepath to save the RoC curve and AUC values to
-    path = f'./analysis/{params["c_ver"]}/{params["c_ver_ft"]}'
-    Path(path).mkdir(parents=True, exist_ok=True)
-
-    # Define optimiser function and instantiate the CAE model
-    optimizer = tf.keras.optimizers.Adam(learning_rate=params['c_learning_rate_ft'], clipnorm=True)
-    model = Autoencoder(params)  # train on the whole CAE...
-
-    # Create checkpoints/managers for each part of the model
-    encoder = model.layers[0]  # ...but save the trainable parameters to the encoder...
-    encoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=encoder)
-    encoder_mngr = tf.train.CheckpointManager(
-        encoder_ckpt,
-        directory=f'./nn/checkpoints/cae/{params["c_ver"]}/{params["c_ver_ft"]}/encoder',
-        max_to_keep=2)
-
-    decoder = model.layers[1]  # ...and the decoder, so that they can be run separately
-    decoder_ckpt = tf.train.Checkpoint(optimizer=optimizer, model=decoder)
-    decoder_mngr = tf.train.CheckpointManager(
-        decoder_ckpt,
-        directory=f'./nn/checkpoints/cae/{params["c_ver"]}/{params["c_ver_ft"]}/decoder',
-        max_to_keep=2)
-
-    if encoder_mngr.latest_checkpoint and decoder_mngr.latest_checkpoint:
-        # Load in the partially-trained fine-tuned model if it exists...
-        encoder_ckpt.restore(encoder_mngr.latest_checkpoint).expect_partial()
-        decoder_ckpt.restore(decoder_mngr.latest_checkpoint).expect_partial()
-        init_epoch = int(encoder_ckpt.save_counter)  # restore last epoch to resume training at correct epoch
-        # print(f"Restored Fine-Tuned Encoder from {encoder_mngr.latest_checkpoint}")
-        # print(f"Restored Fine-Tuned Decoder from {decoder_mngr.latest_checkpoint}")
-        init_epoch -= params['c_epochs']
-    else:
-        init_epoch = 0
-        if params['c_record_ft']:
-            # ...Else load in the pre-trained model and start fine-tuning
-            print("No fine-tuned checkpoint found! Initialising from the pre-trained model...")
-            encoder_ckpt.restore(encoder_pretrained).expect_partial()
-            decoder_ckpt.restore(decoder_pretrained).expect_partial()
-        else:
-            print('Attempting to train/evaluate new fine-tuned model without storing trained values!')
-            print('Try setting "c_record_ft True" inside the chosen config')
-            print('Or make sure the fine-tuned version name ("c_ver_ft") is spelled correctly\nExiting...')
-            exit()
-
-    if params['c_record_ft']:
-        # Create summary writer for the training loss (there is no validation loss for CV)
-        train_log_dir = f'./nn/logs/cae/{params["c_ver"]}/{params["c_ver_ft"]}/train'
-        valid_log_dir = f'./nn/logs/cae/{params["c_ver"]}/{params["c_ver_ft"]}/valid'
-        train_summary_writer = tf.summary.create_file_writer(train_log_dir)
-        valid_summary_writer = tf.summary.create_file_writer(valid_log_dir)
-
-    # Load in the validation dataset and its length
-    valid_dataset, valid_len = load_dataset(params=params, data_type='valid')
-
-    for epoch in range(init_epoch, params['c_epochs_ft']):
-        epoch_train_loss = 0  # initialise epoch training loss
-        epoch_valid_loss = 0  # initialise epoch training accuracy
-
-        # Reload the training dataset (shuffles it)
-        train_dataset, train_len = load_dataset(params=params, data_type='train')
-
-        # Print current epoch/epochs remaining
-        current_epoch = epoch + 1
-        print(f"--== Epoch {current_epoch}/{params['c_epochs_ft']} ==--")
-
-        # <editor-fold desc="---=== [+] Training ===---">
-        # Cycle through the training dataset
-        for train_data in train_dataset.as_numpy_iterator():
-            with tf.GradientTape() as tape:
-                train_pred = model(train_data, training=True)
-                train_loss = mse_loss(train_data, train_pred)
-            gradients = tape.gradient(train_loss, model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-
-            epoch_train_loss += train_loss
-        epoch_train_loss /= train_len  # correct for dataset size differences
-
-        if params['c_record_ft']:
-            # Save the training epoch loss
-            with train_summary_writer.as_default():
-                tf.summary.scalar('loss', epoch_train_loss, step=current_epoch)
-
-            # Save current model weights and biases
-            encoder_mngr.save()
-            decoder_mngr.save()
-        # </editor-fold>
-
-        # <editor-fold desc="---=== [+] Validation ===---">
-        # Calculate and save the epoch validation loss
-        for valid_data in valid_dataset.as_numpy_iterator():
-            valid_pred = model(valid_data, training=False)
-            epoch_valid_loss += mse_loss(valid_data, valid_pred)
-        epoch_valid_loss /= valid_len  # correct for dataset size differences
-
-        if params['c_record_ft']:
-            # Save the validation loss for the current epoch
-            with valid_summary_writer.as_default():
-                tf.summary.scalar('loss', epoch_valid_loss, step=current_epoch)  # Save validation loss every epoch
-        # </editor-fold>
-
-    return

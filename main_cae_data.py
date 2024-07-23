@@ -539,9 +539,9 @@ def load_dataset(params, data_type, path=None):
     with open(path, 'r', newline='') as speccsv:
         name_spec = list(csv.reader(speccsv, delimiter=','))
         num_spectra = len(name_spec)
-        dataset = (tf.data.Dataset.from_tensor_slices(name_spec).shuffle(num_spectra, seed=123456).map(
-            lambda name: tf.py_function(load_scan, [name], [tf.float32])).map(
-            lambda data: tf.expand_dims(data, axis=-1)))
+        dataset = (tf.data.Dataset.from_tensor_slices(name_spec)
+                   .map(lambda name: tf.py_function(load_scan, [name], [tf.float32]), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+                   .map(lambda data: tf.expand_dims(data, axis=-1), num_parallel_calls=tf.data.experimental.AUTOTUNE))
     return dataset, num_spectra
 
 

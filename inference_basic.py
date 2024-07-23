@@ -1,14 +1,18 @@
 # Add the path to the Scanalyser package to the system path.
+import os
 import sys
+from dotenv import load_dotenv
 
-PATH_TO_SCANALYSER = "/home/ms3052/Scanalyser-git-clone/Scanalyser/"
+# Load environment variables from .env file & add the path to the Scanalyser package to the system path.
+load_dotenv()
+PATH_TO_SCANALYSER = os.getenv("PATH_TO_SCANALYSER")
 sys.path.append(PATH_TO_SCANALYSER)
+
 from inference import load_model
 from main_cae_data import select_scan
 from utils import load_config
 from analysis.code_tracks.detector import difference_scans
 
-import os
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
