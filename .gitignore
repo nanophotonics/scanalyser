@@ -9,6 +9,7 @@ __pycache__
 .env
 # ignore all data files
 *.h5
+*.csv
 *.npy
 *.png
 *.pkl

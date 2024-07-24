@@ -1,12 +1,3 @@
-"""
-@Created : 13/10/2020
-@Edited  : 15/01/2023, 17/07/23 by Myron Sukhanov (legacy libs were removed)
-@Author  : Alex Poppe
-@File    : cae.py
-@Software: Pycharm, VS Code
-@Description:
-CAE model trained to reconstruct the resting state of BPT SERS spectra
-"""
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # suppress unnecessary TF loading messages
 
